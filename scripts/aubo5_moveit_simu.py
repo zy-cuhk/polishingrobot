@@ -7,47 +7,83 @@ from control_msgs.msg import GripperCommand
 import time 
 from sensor_msgs.msg import JointState
 
+from urdf_parser_py.urdf import URDF
+from pykdl_utils.kdl_parser import kdl_tree_from_urdf_model
+from pykdl_utils.kdl_kinematics import KDLKinematics
+import numpy as np
+import numpy.matlib
+from frompitoangle import *
+from math import *
 class null_space_control:
     def __init__(self):
-        # moveit_commander.roscpp_initialize(sys.argv)
+        moveit_commander.roscpp_initialize(sys.argv)
         rospy.init_node('moveit_fk_demo', anonymous=True)
         rospy.Subscriber('/joint_states', JointState, self.obtain_joint_states_sim, queue_size=1)
 
-        # self.arm = moveit_commander.MoveGroupCommander('manipulator_i5')
+        self.arm = moveit_commander.MoveGroupCommander('manipulator_i5')
         self.robot = URDF.from_xml_file("/home/zy/catkin_ws/src/aubo_robot-master/aubo_description/urdf/aubo_i5.urdf")
-        self.aubo_q=[]
-        self.aubo_qdes=[]
-        self.aubo_qdotdes=[]
-        self.null_mat=[]
-        self.kp=1
-        self.rdes=[0.0,0.0,0.0,0.0,0.0]
+        self.aubo_q=[0,pi/2,pi/2,pi/2,pi/3,0]
+        self.aubo_q1=np.matrix(self.aubo_q)
+        self.kp=12
+        self.rdot_dsr=np.matrix([0.0,0.0,0.0,0.0,0.0])
+        self.rate=rospy.Rate(10) # 10hz
 
     def obtain_joint_states_sim(self,msg):
+        self.aubo_q=[]
         list1=msg.position
         for i in range(len(list1)):
             self.aubo_q.append(list1[i])
+        self.aubo_q1=np.matrix(self.aubo_q)
         rospy.loginfo("aubo joints are: {}".format(self.aubo_q))
 
 
-    def kdl_computation(self,q):
+    def kdl_computation(self):
         # forward kinematics (returns homogeneous 4x4 matrix)
         kdl_kin = KDLKinematics(self.robot, "base_link", "wrist3_Link")
-        pose = kdl_kin.forward(q) 
+        # self.aubo_q=np.asarray(self.aubo_q)
+        pose = kdl_kin.forward(self.aubo_q) 
         # print pose
-        J = kdl_kin.jacobian(q)
+        J = kdl_kin.jacobian(self.aubo_q)
         # print 'J:', J
+
         return pose, J
 
-    def qdot_generation(self):
-        pJ=J'*inv(J*J')
-        null_mat=eye(4)-pJ*J
-        +null_mat*(self.aubo_qdotdes-self.kp*(self.aubo_q-self.aubo_qdes))
+    def qdot_generation(self,aubo_qdes,aubo_qdotdes):
+        pose, J=self.kdl_computation()
+        # print(type(pose))
+        # print(type(J))
+        J=J[0:5,0:6]
+        # print("new_j is",J)
+        rot_mat=pose[0:3,0:3]
+        # print("rot_mat is",rot_mat)
+        rot_mat=rot_mat.T
+        # print("inverse rot_mat is",rot_mat)
+        zero_mat=np.matlib.zeros((3,3))
+        mat1=np.hstack((rot_mat,zero_mat))
+        mat2=np.hstack((zero_mat,rot_mat))
+        base2endeffector_mat=np.vstack((mat1,mat2))
+        # print("base2endeffector_mat is",base2endeffector_mat)
+        inv_base2endeffector_mat=np.linalg.inv(base2endeffector_mat)
+        # print("inv_base2endeffector_mat is",inv_base2endeffector_mat[0:5,0:5])
+        pJ=np.dot(J.T,np.linalg.inv(np.dot(J,J.T)))
+        # print("pJ is:",pJ)
+        null_mat=np.matlib.identity(6,dtype=float)-np.dot(pJ,J)
+        # print("null_mat is",null_mat)
+        delta_qdot=aubo_qdotdes-self.kp*(self.aubo_q1-aubo_qdes)
+        # print("delta_qdot",delta_qdot)
+        aubo_qdot=np.dot(pJ,np.dot(inv_base2endeffector_mat[0:5,0:5],self.rdot_dsr.T))+np.dot(null_mat,delta_qdot.T)
+        # aubo_qdot=np.dot(pJ,self.rdot_dsr.T)+np.dot(null_mat,delta_qdot.T)
+        # aubo_qdot=np.dot(null_mat,delta_qdot.T)
+        aubo_qdot=np.array([aubo_qdot[0,0],aubo_qdot[1,0],aubo_qdot[2,0],aubo_qdot[3,0],aubo_qdot[4,0],aubo_qdot[5,0]])
+        print("aubo_qdot is: ",aubo_qdot)
+        return aubo_qdot
 
     def moveit_motion(self,joint_positions):    
         # 设置机械臂和夹爪的允许误差值
-        self.arm.set_goal_joint_tolerance(0.001)
+        self.arm.set_goal_joint_tolerance(0.01)
         self.arm.set_joint_value_target(joint_positions)
         self.arm.go()
+        self.rate.sleep()
 
     def moveit_shutdown(self):
         # 关闭并退出moveit
@@ -56,18 +92,35 @@ class null_space_control:
 
 if __name__ == "__main__":
     try:
-        delta_t=0.1
+        step=0.1
+        time1=20
+        tnum=int(time1/step+1)
+        omega=0.5
+        radius=pi/4
         aubo=null_space_control()
-        while(1):
+        time.sleep(0.2)
+        aubo_q=[0,pi/2,pi/2,pi/2,pi/3,0]
+        aubo.moveit_motion(aubo_q)
+        for i in range(tnum):
+        # for i in range(1):
             time1=time.time()
 
-            joint_positions = [-1.0867, -1.274, 0.02832, 0.0820, -1.273, -0.003]
-            aubo_qdot=aubo.qdot_generation()
-            aubo_q=aubo_q+aubo_qdot*delta_t
+            t=step*(i-1)
+            aubo_qdes=np.matrix([0.0,pi/2,pi/2+radius*sin(omega*t),pi/2,pi/3,0.0])
+            aubo_qdotdes=np.matrix([0.0,0.0,radius*omega*cos(omega*t),0.0,0.0,0.0])
+            aubo_qdot=aubo.qdot_generation(aubo_qdes,aubo_qdotdes)
+            aubo_q=aubo_q+aubo_qdot*step
+            print("aubo_q before is:",aubo_q)
+            for i in range(len(aubo_q)):
+                if aubo_q[i]>170.0*pi/180.0:
+                    aubo_q[i]=170.0*pi/180.0
+                elif aubo_q[i]<-170.0*pi/180.0:
+                    aubo_q[i]=-170.0/180.0*pi
+            print("aubo_q after is:",aubo_q)
             aubo.moveit_motion(aubo_q)
-
             time2=time.time()
             rospy.logerr("the last time is: {}".format(time2-time1))
-            aubo.moveit_shutdown()
+            # step=time2-time1
+        aubo.moveit_shutdown()
     except rospy.ROSInterruptException:
         pass
