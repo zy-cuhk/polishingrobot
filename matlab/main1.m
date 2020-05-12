@@ -1,6 +1,6 @@
 %%%%%%%%%%%%%%%%%%%%% General
 clc;
-clear;
+clear; close all
 start=clock;  % start time
 step=0.004;
 time=20;%20
