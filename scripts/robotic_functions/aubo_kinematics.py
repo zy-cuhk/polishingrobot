@@ -506,13 +506,23 @@ def main():
     # joint2=Q.quaternion(rot)
     # print("joints=:",joint2)
 
-    list1=[0, 0, 1,0,1,0]
+    list1=[0.4169788306196942, -1.3621199297826534, -2.011464437502717, -2.22014083451496, -1.5707963267948966, 1.1538174961752024]
     for i in range(len(list1)):
         list1[i]=list1[i]*180/pi
     ak47 = Aubo_kinematics()
     # print ak47.aubo_forward([-3.3364,12.406,-81.09,-91.207,-86.08,0.164])
     mat1=np.matrix(ak47.aubo_forward(list1)).reshape((4,4))
     print (mat1)
+
+    z_height=0.6
+    radius=0.3
+    tt=[1,0,0,radius,0,1,0,0,0,0,1,z_height,0,0,0,1]
+    # tt =[6.123233995736766e-17, 0.0, 1.0, 0.6, 0.0, 1.0, 0.0, 0.3, -1.0, 0.0, 6.123233995736766e-17, 0.2, 0.0, 0.0, 0.0, 1.0]
+    aubo_joints=ak47.GetInverseResult(tt, ak47.degree_to_rad([42.583065044150764, -110.38508835871683, -79.4807744023249, 30.904313956391917, -47.416934955849236, 90.0]))
+    for i in range(len(aubo_joints)):
+        aubo_joints[i] = aubo_joints[i]
+    print(aubo_joints)
+
 
 if __name__ == "__main__":
     main()

@@ -2,7 +2,8 @@
 
 # Import the module
 import sys
-sys.path.append("/home/zy/catkin_ws/src/hrl-kdl")
+print sys.path
+# sys.path.append("/home/zy/catkin_ws/src/hrl-kdl/pykdl_utils")
 from urdf_parser_py.urdf import URDF
 from pykdl_utils.kdl_parser import kdl_tree_from_urdf_model
 from pykdl_utils.kdl_kinematics import KDLKinematics
@@ -30,5 +31,6 @@ if __name__ == "__main__":
     try:
         q = [0, 0, 1,0,1,0]
         jacobian_mat=jacobian_generation(q)
+        print(jacobian_mat)
     except rospy.ROSInterruptException:
         pass

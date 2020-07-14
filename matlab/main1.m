@@ -1,30 +1,24 @@
 %%%%%%%%%%%%%%%%%%%%% General
 clc;
-clear; close all
+clear;
 start=clock;  % start time
 step=0.004;
 time=20;%20
 tnum=time/step+1;% set time
 %%%%%%%%%%%%%%%%%%%%%%%
 
-l1=0.2;   
-l2=0.2;
-l3=0.2;
-l4=0.2;
+l1=0.4;   
+l2=0.4;
+l3=0.4;
+l4=0.4;
 
 %%%%%%%%%%%%%%%%%%%%%%% parameter initialize, 2-D space
 v=[pi/4 pi/3 pi/2 pi/2 0 0 0 0]';%4-link
 x=tran(v,l1,l2,l3,l4);
 omega=0.5;%0.5
-bq2=pi/20;%0.12
-bq3=pi/20;
-radiusx=0.6;
+radius=pi/8;%0.12
 
 Kp=500;
-Kpx=10;
-
-kq2=200;%=200 activate =0 no use
-kq3=200;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 starttimer=0;
 %%%%%%%%%%%%%%%%%%%%%%% Main Loop
@@ -43,34 +37,24 @@ for i=1:tnum
     
     x=tran(v,l1,l2,l3,l4); % true cartesian space position
     recx(:,i)=x;
-    
-    fq2=q(2)^2-bq2^2;
-    fq3=q(3)^2-bq3^2;
-    
-    regq2=kq2*min(0,fq2);
-    regq3=kq3*min(0,fq3);
-    
-    regq=[0 regq2 regq3 0]';
-    recregq(:,i)=regq;
 
     dx=jac(v,l1,l2,l3,l4);
     recdx(:,i)=dx;
     %%%%
     t=step*(i-1);
     
-    qd=[q(1) q(2) q(3) q(4)]';
-    dqd=[0 0 0 0]';
+    qd=[q(1) q(2) pi/2+radius*sin(omega*t) q(4)]';
+    dqd=[0 0 radius*omega*sin(omega*t) 0]';
     
     errq=q-qd;
     recerrq(:,i)=errq;    
 
-    xd=[-0.1+radiusx*cos(omega*t) 0.2+radiusx*sin(omega*t)]';%[0.2+0.1*cos(omega*t) 0.4+0.1*sin(omega*t)]';
+    %xd=[0.2+radius*cos(omega*t) 0.4+radius*sin(omega*t)]';%[0.2+0.1*cos(omega*t) 0.4+0.1*sin(omega*t)]';
     %[a+r1*cos(omega*t)/(1+sin(omega*t)^2) b+r2*cos(omega*t)*sin(omega*t)/(1+sin(omega*t)^2)]';
-    dxd=[-radiusx*omega*sin(omega*t) radiusx*omega*cos(omega*t)]';%[-0.1*omega*sin(omega*t) 0.1*omega*cos(omega*t)]';
+    dxd=[0 0]';%[-0.1*omega*sin(omega*t) 0.1*omega*cos(omega*t)]';
     %[(-r1*omega*sin(omega*t)*(1+sin(omega*t)^2)-r1*omega*cos(omega*t)^2*2*sin(omega*t))/(1+sin(omega*t)^2)^2 ((-r2*omega*sin(omega*t)^2+r2*omega*cos(omega*t)^2)*(1+sin(omega*t)^2)-r2*omega*sin(omega*t)^2*cos(omega*t)^2*2)/(1+sin(omega*t)^2)^2]';
     
-    recxd(:,i)=xd;
-    recerrx(:,i)=x-xd;
+    recdxd(:,i)=dxd;
         
     J=Jh(v,l1,l2,l3,l4);
     pJ=J'*inv(J*J');
@@ -78,12 +62,8 @@ for i=1:tnum
     N=eye(4)-pJ*J;
     Nmatrix=null(J);
     
-    %u=pJ*(dxd-Kpx*(x-xd))+N*(dqd-Kp*(q-qd));
-    u=pJ*(dxd-Kpx*(x-xd))+N*regq;
+    u=pJ*dxd+N*(dqd-Kp*(q-qd));
     
-    recdet(:,i)=det(J*J');
-    
-       
     speed=u;
     
     if i==1
@@ -100,15 +80,7 @@ end
 tt=0:step:time;
 
 figure;
-plot(recx(1,:),recx(2,:),'b',recxd(1,:),recxd(2,:),'r:');
-% xlabel('time (s)', 'FontSize', 20);ylabel('Force (N)', 'FontSize', 20);
-% legend('f_{e1}', 'f_{e2}', 'weight', 4);
-axis([-2 2 -2 2]);
-axis equal;
-grid on;
-
-figure;
-plot(tt, recerrx);
+plot(tt, recx);
 % xlabel('time (s)', 'FontSize', 20);ylabel('Force (N)', 'FontSize', 20);
 % legend('f_{e1}', 'f_{e2}', 'weight', 4);
 axis([0 20 -1 1]);
@@ -117,20 +89,6 @@ grid on;
 figure;
 plot(tt, recq);
 % xlabel('time (s)', 'FontSize', 20);ylabel('Force (N)', 'FontSize', 20);
-legend('q1', 'q2', 'q3', 'q4');
-axis([0 20 -10*pi 10*pi]);
-grid on;
-
-figure;
-plot(tt, recregq);
-% xlabel('time (s)', 'FontSize', 20);ylabel('Force (N)', 'FontSize', 20);
-legend('q1', 'q2', 'q3', 'q4');
-axis([0 20 -10 10]);
-grid on;
-
-figure;
-plot(tt, recdet);
-% xlabel('time (s)', 'FontSize', 20);ylabel('Force (N)', 'FontSize', 20);
 % legend('f_{e1}', 'f_{e2}', 'weight', 4);
-axis([0 20 -0.1 0.1]);
+axis([0 20 -5 5]);
 grid on;
